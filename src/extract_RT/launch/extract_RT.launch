@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<launch>
+  <arg name="calib_file" value="$(find extract_RT)/param/_lidar_camera_calibration.yaml" />
+  <rosparam command="load" file="$(arg calib_file)" />
+  <node pkg="extract_RT" type="extract_RT" name="extract_RT" output="screen" />
+</launch>
