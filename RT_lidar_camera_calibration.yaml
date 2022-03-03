@@ -1,0 +1,26 @@
+%YAML:1.0
+---
+CameraMat: !!opencv-matrix
+   rows: 3
+   cols: 3
+   dt: f
+   data: [ 2.40326929e+03, 0., 1.21660547e+03, 0., 2.41215137e+03,
+       1.00821271e+03, 0., 0., 1. ]
+DistCoeff: !!opencv-matrix
+   rows: 5
+   cols: 1
+   dt: f
+   data: [ -1.78918391e-01, 1.57092005e-01, 7.56439913e-05,
+       -2.09199119e-04, 0. ]
+DistModel: plumb_bob
+T_Sensor2Cam: !!opencv-matrix
+   rows: 3
+   cols: 1
+   dt: d
+   data: [ 1.3244641514538980e-01, 3.4045417268489583e-03,
+       -1.3300276353963253e-01 ]
+R_Sensor2Cam: [ -1.5902163460850716e-02, -5.7869382202625275e-02,
+    2.5301313027739525e-02 ]
+ReprojectionError: 1.0405111223379128e+01
+RotationError: 2.2320195860475089e-01
+TranslationError: 1.4220572684604159e-02

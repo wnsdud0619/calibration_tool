@@ -14,24 +14,9 @@ cv::Mat cameraMat;
 cv::Mat distCoeff;
 std::vector<cv::Point3f> clicked_lidar_points;
 std::vector<cv::Point2f> clicked_image_points;
-double R_err_tmp = 0;
+std::vector<double> re_error, R_error_degree, T_error;
+double re_error_sum, re_error_vari, re_error_devi, R_error_sum, R_error_vari, R_error_devi, T_error_sum, T_error_vari, T_error_devi;
 const double PI = std::acos(-1);
-
-double inner_product(std::vector<cv::Point3f> a, std::vector<cv::Point3f> b){
-
-    double result = 0;
-    result= a.data()->x * b.data()->x + a.data()->y * b.data()->y + a.data()->z * b.data()->z;
-    return result;
-}
-
-double l2norm(std::vector<cv::Point3f> a){
-
-    double result = 0;
-    result = a.data()->x * a.data()->x + a.data()->y * a.data()->y + a.data()->z * a.data()->z;
-    result = sqrt(result);
-
-    return result;
-}
 
 bool is_rotation_matrix(const cv::Mat& in_matrix)
 {
@@ -68,7 +53,7 @@ cv::Point3f get_ypr_from_matrix(const cv::Mat& in_rotation)
         y = atan2(-in_rotation.at<double>(2,0), sy);
         z = 0;
     }
-    return cv::Point3f(z, y, x);
+    return cv::Point3f(x, y, z);
 }
 
 void SaveCalibrationFile(cv::Mat in_intrinsic, cv::Mat in_dist_coeff, cv::Mat tran_sensor2optical, cv::Mat R_sensor2optical, double re_error, double R_error, double T_error)
@@ -155,11 +140,10 @@ int main(int argc, char ** argv)
 
     // parsing parameters
     if(parse_params(nh)) return -1;
-
+    double input_point_size = clicked_image_points.size();
     cv::Mat rotation_vector, translation_vector;
-
     //NO Ransac PnP
-    /*cv::solvePnP(clicked_lidar_points,
+    cv::solvePnP(clicked_lidar_points,
                  clicked_image_points,
                  cameraMat,
                  distCoeff,
@@ -168,7 +152,8 @@ int main(int argc, char ** argv)
                  false,
                  cv::SOLVEPNP_ITERATIVE
                  );
-    cv::solvePnPRefineVVS(clicked_lidar_points,
+
+   /* cv::solvePnPRefineVVS(clicked_lidar_points,
                           clicked_image_points,
                           cameraMat,
                           distCoeff,
@@ -177,7 +162,7 @@ int main(int argc, char ** argv)
                           cv::TermCriteria(cv::TermCriteria::EPS+cv::TermCriteria::COUNT, 20, FLT_EPSILON),1);*/
 
     //Ransac PNP
-    cv::Mat inliers;
+   /* cv::Mat inliers;
     std::vector<cv::Point2f> inlier2d;
     std::vector<cv::Point3f> inlier3d;
 
@@ -192,7 +177,7 @@ int main(int argc, char ** argv)
                  8.f,
                  0.99,
                  inliers,
-                 cv::SOLVEPNP_SQPNP);
+                 cv::SOLVEPNP_ITERATIVE);
 
     for (int i = 0; i < inliers.rows; i++)
     {
@@ -207,12 +192,23 @@ int main(int argc, char ** argv)
                          distCoeff,
                          rotation_vector,
                          translation_vector,
-                         cv::TermCriteria(cv::TermCriteria::EPS+cv::TermCriteria::COUNT, 20, FLT_EPSILON),1);
+                         cv::TermCriteria(cv::TermCriteria::EPS+cv::TermCriteria::COUNT, 20, FLT_EPSILON),1);*/
 
+    //re_error
     std::vector<cv::Point2f> reproject_img_pts;
     cv::projectPoints(clicked_lidar_points, rotation_vector, translation_vector, cameraMat, distCoeff, reproject_img_pts);
-    double re_error = cv::norm(cv::Mat(clicked_image_points), cv::Mat(reproject_img_pts), cv::NORM_L2)/ reproject_img_pts.size();
-    std::cout<<"re_error: "<<re_error<<std::endl;
+
+    for(int i = 0; i<input_point_size; i++)
+    {
+        //l2norm
+        double result = 0;
+        double xDiff = clicked_image_points[i].x - reproject_img_pts[i].x;
+        double yDiff = clicked_image_points[i].y - reproject_img_pts[i].y;
+        result = std::pow(xDiff,2) + std::pow(yDiff,2);
+        result = std::sqrt(result);
+        re_error_sum += result;
+        re_error.push_back(result);
+    }
 
     cv::Mat sensor_rotation_matrix;
     cv::Rodrigues(rotation_vector, sensor_rotation_matrix);
@@ -225,40 +221,84 @@ int main(int argc, char ** argv)
     cv::Mat sensor_translation_vector = -sensor_rotation * translation_vector;
     std::cout << "Sensor to Optical translation(x, y, z) : " << sensor_translation_vector << std::endl;
 
-
     //*******************************unproject #1 undist********************************************************
     std::vector<cv::Point2f> points_undistorted;
-    cv::undistortPoints(clicked_image_points, points_undistorted, cameraMat, distCoeff, cv::noArray(), cameraMat);
+    cv::undistortPoints(clicked_image_points, points_undistorted, cameraMat, distCoeff, cv::noArray(), cv::noArray());
     //std::cout <<points_undistorted<< std::endl;
     //std::cout<<"****************************"<<std::endl;
 
     std::vector<cv::Point3f> re_points_3d, clicked_3d_points;
     for(int i=0; i<points_undistorted.size(); i++)
     {
-        cv::Mat cam3d = (cv::Mat_<double>(3, 1) << (points_undistorted[i].x - cameraMat.at<float>(0,2)) / cameraMat.at<float>(0,0) * clicked_lidar_points[i].x,
-                         (points_undistorted[i].y - cameraMat.at<float>(1,2)) / cameraMat.at<float>(1,1) * clicked_lidar_points[i].x,
-                         clicked_lidar_points[i].x);
+        cv::Mat cam3d_tmp = (cv::Mat_<double>(3, 1) << clicked_lidar_points[i].x,
+                         clicked_lidar_points[i].y,
+                         clicked_lidar_points[i].z);
 
-        cam3d = cam3d - translation_vector;
-        cam3d = sensor_rotation_matrix.t()*cam3d;
+        cam3d_tmp = sensor_rotation_matrix * cam3d_tmp + translation_vector;     
+
+        cv::Mat cam3d = (cv::Mat_<double>(3, 1) << points_undistorted[i].x * cam3d_tmp.at<double>(2.0),
+                         points_undistorted[i].y * cam3d_tmp.at<double>(2.0),
+                         cam3d_tmp.at<double>(2.0));
+
+        cv::Mat lidar3d = sensor_rotation_matrix.t() * (cam3d - translation_vector);
+        re_points_3d.push_back(cv::Point3f(lidar3d.at<double>(0,0),lidar3d.at<double>(1,0),lidar3d.at<double>(2,0)));
+        clicked_3d_points.push_back(cv::Point3f(clicked_lidar_points[i].x,clicked_lidar_points[i].y,clicked_lidar_points[i].z));
 
         //R error
-        re_points_3d.push_back(cv::Point3f(cam3d.at<double>(0,0),cam3d.at<double>(1,0),cam3d.at<double>(2,0)));
-        clicked_3d_points.push_back(cv::Point3f(clicked_lidar_points[i].x,clicked_lidar_points[i].y,clicked_lidar_points[i].z));
-        auto radian = acos(inner_product(clicked_3d_points,re_points_3d)/(l2norm(clicked_3d_points)*l2norm(re_points_3d)));
-        auto R_err = radian * 180 / PI;
-        //std::cout << "degree_err"<< degree_err << std::endl;
-        R_err_tmp = R_err_tmp + R_err;
+        double inner_product = clicked_lidar_points[i].x * lidar3d.at<double>(0,0) +
+                               clicked_lidar_points[i].y * lidar3d.at<double>(1,0) +
+                               clicked_lidar_points[i].z * lidar3d.at<double>(2,0);
+        double l2norm_clicked3d = std::pow(clicked_lidar_points[i].x, 2) + std::pow(clicked_lidar_points[i].y, 2) + std::pow(clicked_lidar_points[i].z, 2);
+        l2norm_clicked3d = std::sqrt(l2norm_clicked3d);
+        double l2norm_re_points3d = std::pow(lidar3d.at<double>(0,0), 2) + std::pow(lidar3d.at<double>(1,0), 2) + std::pow(lidar3d.at<double>(2,0), 2);
+        l2norm_re_points3d = std::sqrt(l2norm_re_points3d);
+        double R_error_radian = acos(inner_product/(l2norm_clicked3d*l2norm_re_points3d));
+        //std::cout<<"R_error_radian: " <<R_error_radian <<std::endl;
+        double R_error_degree_tmp = R_error_radian * 180 / PI;
+        //std::cout<<"R_error_degree: " <<R_error_degree_tmp <<std::endl;
+        R_error_degree.push_back(R_error_degree_tmp);
+        R_error_sum = R_error_sum + R_error_degree_tmp;
+
+        //T error
+        double result = 0;
+        double xdiff = clicked_lidar_points[i].x - lidar3d.at<double>(0,0);
+        double ydiff = clicked_lidar_points[i].y - lidar3d.at<double>(1,0);
+        double zdiff = clicked_lidar_points[i].z - lidar3d.at<double>(2,0);
+        result = std::pow(xdiff, 2) + std::pow(ydiff, 2) + std::pow(zdiff, 2);
+        result = std::sqrt(result);
+
+        T_error_sum += result;
+        T_error.push_back(result);
 
     }
+    //error
+    double re_error_avg = re_error_sum/input_point_size;
+    double T_error_avg = T_error_sum/input_point_size;
+    double R_error_avg = R_error_sum/input_point_size;
+    std::cout<<"re_error_avg: " <<re_error_avg << std::endl;
+    std::cout<<"T_error_avg: " <<T_error_avg << std::endl;
+    std::cout<<"R_error_avg: " <<R_error_avg <<std::endl;
 
-    //T error
-    double T_error = cv::norm(cv::Mat(clicked_lidar_points), cv::Mat(re_points_3d), cv::NORM_L2)/ clicked_lidar_points.size();
-    double R_error = R_err_tmp/points_undistorted.size();
-    std::cout<<"T_error: " <<T_error << std::endl;
-    std::cout<<"R_error: " <<R_error <<std::endl;
+    //R & T error standard deviation
+    for(int i =0; i<input_point_size; i++)
+    {
+        re_error_vari += std::pow(re_error[i] - re_error_avg, 2);
+        R_error_vari += std::pow(R_error_degree[i] - R_error_avg, 2);
+        T_error_vari += std::pow(T_error[i] - T_error_avg, 2);
+        //std::cout<<"R_error_vari: " <<R_error_vari <<std::endl;
+    }
+    re_error_vari = re_error_vari / input_point_size;
+    re_error_devi = sqrt(re_error_vari);
+    R_error_vari = R_error_vari / input_point_size;
+    R_error_devi = sqrt(R_error_vari);
+    T_error_vari = T_error_vari / input_point_size;
+    T_error_devi = sqrt(T_error_vari);
 
-    SaveCalibrationFile(cameraMat, distCoeff, sensor_translation_vector, sensor_rotation, re_error, R_error, T_error);
+    std::cout<<"re_error_devi: " <<re_error_devi <<std::endl;
+    std::cout<<"R_error_devi: " <<R_error_devi <<std::endl;
+    std::cout<<"T_error_devi: " <<T_error_devi <<std::endl;
+
+    SaveCalibrationFile(cameraMat, distCoeff, sensor_translation_vector, sensor_rotation, re_error_avg, R_error_avg, T_error_avg);
 
     return 0;
 }
