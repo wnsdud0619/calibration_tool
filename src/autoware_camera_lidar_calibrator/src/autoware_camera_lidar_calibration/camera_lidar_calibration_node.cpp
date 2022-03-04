@@ -43,9 +43,9 @@ class ROSCameraLidarApp
 
   ros::Subscriber   subscriber_image_raw_;
   ros::Subscriber   subscriber_points_raw_;
-  ros::Subscriber     subscriber_intrinsics_;
-  ros::Subscriber     subscriber_clicked_point_;
-  ros::Subscriber     subscriber_image_point_;
+  ros::Subscriber   subscriber_intrinsics_;
+  ros::Subscriber   subscriber_clicked_point_;
+  ros::Subscriber   subscriber_image_point_;
 
   cv::Size            image_size_;
   cv::Mat             camera_instrinsics_;
@@ -57,7 +57,8 @@ class ROSCameraLidarApp
   std::vector<cv::Point2f> clicked_image_points_;
   std::vector<cv::Point3f> clicked_velodyne_points_;
   std::vector<cv::Point3f> clicked_sensor_points_;
-
+  std::vector<double> re_error;
+  double re_error_sum;
 
   bool is_rotation_matrix(const cv::Mat& in_matrix)
   {
@@ -158,8 +159,8 @@ class ROSCameraLidarApp
                    distortion_coefficients_,
                    sensor_rotation_vector,
                    sensor_translation_vector,
-                   true,
-                   CV_EPNP
+                   false,
+                   cv::SOLVEPNP_ITERATIVE
       );
 
       cv::Mat sensor_rotation_matrix;
@@ -181,10 +182,22 @@ class ROSCameraLidarApp
 
       std::vector<cv::Point2f> sensor_reproject_img_pts;
       cv::projectPoints(clicked_sensor_points_, sensor_rotation_vector, sensor_translation_vector, camera_instrinsics_, distortion_coefficients_, sensor_reproject_img_pts);
-      double sensor_err = cv::norm(cv::Mat(clicked_image_points_), cv::Mat(sensor_reproject_img_pts), cv::NORM_L2)/ sensor_reproject_img_pts.size();
-      sensor_translation_vector = -sensor_camera_velodyne_rotation * sensor_translation_vector;
-    
-      std::cout << "sensor err : " << sensor_err << std::endl;
+
+      /*double sensor_err = cv::norm(cv::Mat(clicked_image_points_), cv::Mat(sensor_reproject_img_pts), cv::NORM_L2)/ sensor_reproject_img_pts.size();
+      sensor_translation_vector = -sensor_camera_velodyne_rotation * sensor_translation_vector;*/
+      for(int i = 0; i<sensor_reproject_img_pts.size(); i++)
+      {
+        //l2norm
+        double result = 0;
+        double xDiff = clicked_image_points_[i].x - sensor_reproject_img_pts[i].x;
+        double yDiff = clicked_image_points_[i].y - sensor_reproject_img_pts[i].y;
+        result = std::pow(xDiff,2) + std::pow(yDiff,2);
+        result = std::sqrt(result);
+        re_error_sum += result;
+        re_error.push_back(result);
+      }
+      double re_error_avg = re_error_sum/sensor_reproject_img_pts.size();	
+      std::cout << "sensor err : " << re_error_avg << std::endl;
       std::cout << "if you want to save param and select next point, (y/n) : "<<std::endl;
      
       char key;
@@ -194,7 +207,7 @@ class ROSCameraLidarApp
       {
         //sensor_kit cali save
         std::cout << "\t\t\t\t\t\t[Sensor kit based]" << std::endl;
-        SaveCalibrationFile(sensor_extrinsics, camera_instrinsics_, distortion_coefficients_, image_size_, sensor_translation_vector, sensor_camera_velodyne_rotation, clicked_sensor_points_, clicked_image_points_, sensor_err);
+        SaveCalibrationFile(sensor_extrinsics, camera_instrinsics_, distortion_coefficients_, image_size_, sensor_translation_vector, sensor_camera_velodyne_rotation, clicked_sensor_points_, clicked_image_points_, re_error_avg);
     
       }
       else if(key == 'n' || key == 'N') // N or n

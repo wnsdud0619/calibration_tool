@@ -221,28 +221,20 @@ int main(int argc, char ** argv)
     cv::Mat sensor_translation_vector = -sensor_rotation * translation_vector;
     std::cout << "Sensor to Optical translation(x, y, z) : " << sensor_translation_vector << std::endl;
 
-    //*******************************unproject #1 undist********************************************************
+    //*******************************unproject undist********************************************************
     std::vector<cv::Point2f> points_undistorted;
     cv::undistortPoints(clicked_image_points, points_undistorted, cameraMat, distCoeff, cv::noArray(), cv::noArray());
-    //std::cout <<points_undistorted<< std::endl;
-    //std::cout<<"****************************"<<std::endl;
-
-    std::vector<cv::Point3f> re_points_3d, clicked_3d_points;
     for(int i=0; i<points_undistorted.size(); i++)
     {
         cv::Mat cam3d_tmp = (cv::Mat_<double>(3, 1) << clicked_lidar_points[i].x,
                          clicked_lidar_points[i].y,
                          clicked_lidar_points[i].z);
-
         cam3d_tmp = sensor_rotation_matrix * cam3d_tmp + translation_vector;     
 
         cv::Mat cam3d = (cv::Mat_<double>(3, 1) << points_undistorted[i].x * cam3d_tmp.at<double>(2.0),
                          points_undistorted[i].y * cam3d_tmp.at<double>(2.0),
                          cam3d_tmp.at<double>(2.0));
-
         cv::Mat lidar3d = sensor_rotation_matrix.t() * (cam3d - translation_vector);
-        re_points_3d.push_back(cv::Point3f(lidar3d.at<double>(0,0),lidar3d.at<double>(1,0),lidar3d.at<double>(2,0)));
-        clicked_3d_points.push_back(cv::Point3f(clicked_lidar_points[i].x,clicked_lidar_points[i].y,clicked_lidar_points[i].z));
 
         //R error
         double inner_product = clicked_lidar_points[i].x * lidar3d.at<double>(0,0) +
@@ -253,9 +245,7 @@ int main(int argc, char ** argv)
         double l2norm_re_points3d = std::pow(lidar3d.at<double>(0,0), 2) + std::pow(lidar3d.at<double>(1,0), 2) + std::pow(lidar3d.at<double>(2,0), 2);
         l2norm_re_points3d = std::sqrt(l2norm_re_points3d);
         double R_error_radian = acos(inner_product/(l2norm_clicked3d*l2norm_re_points3d));
-        //std::cout<<"R_error_radian: " <<R_error_radian <<std::endl;
         double R_error_degree_tmp = R_error_radian * 180 / PI;
-        //std::cout<<"R_error_degree: " <<R_error_degree_tmp <<std::endl;
         R_error_degree.push_back(R_error_degree_tmp);
         R_error_sum = R_error_sum + R_error_degree_tmp;
 
@@ -271,21 +261,21 @@ int main(int argc, char ** argv)
         T_error.push_back(result);
 
     }
-    //error
-    double re_error_avg = re_error_sum/input_point_size;
-    double T_error_avg = T_error_sum/input_point_size;
-    double R_error_avg = R_error_sum/input_point_size;
-    std::cout<<"re_error_avg: " <<re_error_avg << std::endl;
-    std::cout<<"T_error_avg: " <<T_error_avg << std::endl;
-    std::cout<<"R_error_avg: " <<R_error_avg <<std::endl;
 
-    //R & T error standard deviation
+    //error_avg_print
+    double re_error_avg = re_error_sum/input_point_size;
+    double R_error_avg = R_error_sum/input_point_size;
+    double T_error_avg = T_error_sum/input_point_size;
+    std::cout<<"re_error_avg: " <<re_error_avg << std::endl;
+    std::cout<<"R_error_avg: " <<R_error_avg <<std::endl;
+    std::cout<<"T_error_avg: " <<T_error_avg << std::endl;
+
+    //error standard deviation
     for(int i =0; i<input_point_size; i++)
     {
         re_error_vari += std::pow(re_error[i] - re_error_avg, 2);
         R_error_vari += std::pow(R_error_degree[i] - R_error_avg, 2);
         T_error_vari += std::pow(T_error[i] - T_error_avg, 2);
-        //std::cout<<"R_error_vari: " <<R_error_vari <<std::endl;
     }
     re_error_vari = re_error_vari / input_point_size;
     re_error_devi = sqrt(re_error_vari);
@@ -293,7 +283,6 @@ int main(int argc, char ** argv)
     R_error_devi = sqrt(R_error_vari);
     T_error_vari = T_error_vari / input_point_size;
     T_error_devi = sqrt(T_error_vari);
-
     std::cout<<"re_error_devi: " <<re_error_devi <<std::endl;
     std::cout<<"R_error_devi: " <<R_error_devi <<std::endl;
     std::cout<<"T_error_devi: " <<T_error_devi <<std::endl;
