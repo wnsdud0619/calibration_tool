@@ -112,7 +112,7 @@ plz check param in calibration_tool/src/autoware_camera_lidar_calibrator/launch/
 
 
 	catkin_make
-	bash calibration_check_start.sh
+	bash calibrator_start.sh
 
 # 2. extract_RT
 

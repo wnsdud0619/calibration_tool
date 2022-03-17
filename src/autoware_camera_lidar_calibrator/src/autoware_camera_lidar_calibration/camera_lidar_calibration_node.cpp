@@ -106,7 +106,7 @@ class ROSCameraLidarApp
     if ((homedir = getenv("HOME")) == NULL) {
       homedir = getpwuid(getuid())->pw_dir;
     }
-    path_filename_str = std::string(homedir) + "/lidar2cam-cali_ws/src/extract_RT/param/" + "lidar_camera_calibration.yaml";
+    path_filename_str = std::string(homedir) + "/calibration_tool/src/extract_RT/param/" + "lidar_camera_calibration.yaml";
 
     cv::FileStorage fs(path_filename_str.c_str(), cv::FileStorage::WRITE);
     if(!fs.isOpened()){
@@ -183,8 +183,6 @@ class ROSCameraLidarApp
       std::vector<cv::Point2f> sensor_reproject_img_pts;
       cv::projectPoints(clicked_sensor_points_, sensor_rotation_vector, sensor_translation_vector, camera_instrinsics_, distortion_coefficients_, sensor_reproject_img_pts);
 
-      /*double sensor_err = cv::norm(cv::Mat(clicked_image_points_), cv::Mat(sensor_reproject_img_pts), cv::NORM_L2)/ sensor_reproject_img_pts.size();
-      sensor_translation_vector = -sensor_camera_velodyne_rotation * sensor_translation_vector;*/
       for(int i = 0; i<sensor_reproject_img_pts.size(); i++)
       {
         //l2norm
