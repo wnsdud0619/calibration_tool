@@ -61,35 +61,35 @@ opencv 다운받아 build
 
 	mkdir build   
 	cd build   
-	cmake -D CMAKE_BUILD_TYPE=RELEASE\
-	-D CMAKE_INSTALL_PREFIX=/usr/local\
-	-D WITH_TBB=OFF\
-	-D WITH_IPP=OFF\
-	-D WITH_1394=OFF\
-	-D WITH_GTK_2_X=ON\
-	-D BUILD_WITH_DEBUG_INFO=OFF\
-	-D BUILD_DOCS=OFF\
-	-D INSTALL_C_EXAMPLES=ON\
-	-D INSTALL_PYTHON_EXAMPLES=ON\
-	-D BUILD_EXAMPLES=OFF\
-	-D BUILD_TESTS=OFF\
-	-D BUILD_PERF_TESTS=OFF\
-	-D WITH_QT=OFF\
-	-D WITH_GTK=ON\
-	-D WITH_OPENGL=ON\
-	-D OPENCV_EXTRA_MODULES_PATH=../../opencv_contrib-3.4.17/modules\
-	-D WITH_V4L=ON\
-	-D WITH_FFMPEG=ON\
-	-D WITH_XINE=ON\
-	-D BUILD_NEW_PYTHON_SUPPORT=ON\
-	-D PYTHON2_INCLUDE_DIR=/usr/include/python2.7\
-	-D PYTHON2_NUMPY_INCLUDE_DIRS=/usr/lib/python2.7/dist-packages/numpy/core/include/\
-	-D PYTHON2_PACKAGES_PATH=/usr/lib/python2.7/dist-packages\
-	-D PYTHON2_LIBRARY=/usr/lib/x86_64-linux-gnu/libpython2.7.so\
-	-D PYTHON3_INCLUDE_DIR=/usr/include/python3.6m\
-	-D PYTHON3_NUMPY_INCLUDE_DIRS=/usr/lib/python3/dist-packages/numpy/core/include/\
-	-D PYTHON3_PACKAGES_PATH=/usr/lib/python3/dist-packages\
-	-D PYTHON3_LIBRARY=/usr/lib/x86_64-linux-gnu/libpython3.6m.so\
+	cmake -D CMAKE_BUILD_TYPE=RELEASE \
+	-D CMAKE_INSTALL_PREFIX=/usr/local \
+	-D WITH_TBB=OFF \
+	-D WITH_IPP=OFF \
+	-D WITH_1394=OFF \
+	-D WITH_GTK_2_X=ON \
+	-D BUILD_WITH_DEBUG_INFO=OFF \
+	-D BUILD_DOCS=OFF \
+	-D INSTALL_C_EXAMPLES=ON \
+	-D INSTALL_PYTHON_EXAMPLES=ON \
+	-D BUILD_EXAMPLES=OFF \
+	-D BUILD_TESTS=OFF \
+	-D BUILD_PERF_TESTS=OFF \
+	-D WITH_QT=OFF \
+	-D WITH_GTK=ON \
+	-D WITH_OPENGL=ON \
+	-D OPENCV_EXTRA_MODULES_PATH=../../opencv_contrib-3.4.17/modules \
+	-D WITH_V4L=ON \
+	-D WITH_FFMPEG=ON \
+	-D WITH_XINE=ON \
+	-D BUILD_NEW_PYTHON_SUPPORT=ON \
+	-D PYTHON2_INCLUDE_DIR=/usr/include/python2.7 \
+	-D PYTHON2_NUMPY_INCLUDE_DIRS=/usr/lib/python2.7/dist-packages/numpy/core/include/ \
+	-D PYTHON2_PACKAGES_PATH=/usr/lib/python2.7/dist-packages \
+	-D PYTHON2_LIBRARY=/usr/lib/x86_64-linux-gnu/libpython2.7.so \
+	-D PYTHON3_INCLUDE_DIR=/usr/include/python3.6m \
+	-D PYTHON3_NUMPY_INCLUDE_DIRS=/usr/lib/python3/dist-packages/numpy/core/include/ \
+	-D PYTHON3_PACKAGES_PATH=/usr/lib/python3/dist-packages \
+	-D PYTHON3_LIBRARY=/usr/lib/x86_64-linux-gnu/libpython3.6m.so \
 	../   
 
 본인 컴퓨터 CPU 코어수 확인하여 make진행   
