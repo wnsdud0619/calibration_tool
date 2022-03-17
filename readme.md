@@ -8,7 +8,7 @@ calibration_check
 
 
 # opencv 3.4.17설치 방법     
-------------
+
 기존에 설치된 항목 지우기   
 
 	sudo apt-get remove libopencv*   
@@ -124,6 +124,11 @@ plz check param in calibration_tool/src/autoware_camera_lidar_calibrator/launch/
 required topic   
 /image_raw   
 /points_raw (lidar_raw data)   
+
+
+	catkin_make
+	bash calibration_check_start.sh
+
 
 
 
