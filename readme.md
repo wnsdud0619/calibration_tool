@@ -1,5 +1,5 @@
 
-요구사항 ubuntu 18.04, opnecv 3.4.17, ros-melodic
+요구사항 : ubuntu 18.04, opnecv 3.4.17, ros-melodic
 
 autoware_camera_lidar_calibration   
 extract_RT   
@@ -7,15 +7,17 @@ calibration_check
 순서대로 파일 실행하여 calibration 진행.   
 
 
-# opencv 3.4.17설치 방법.       
+# opencv 3.4.17설치 방법     
 ------------
 기존에 설치된 항목 지우기   
-sudo apt-get remove libopencv*   
-sudo apt-get autoremove   
+
+	sudo apt-get remove libopencv*   
+	sudo apt-get autoremove   
 
 업데이트   
-sudo apt-get update   
-sudo apt-get upgrade   
+
+	sudo apt-get update   
+	sudo apt-get upgrade   
 
 필수개발툴 설치   
 
@@ -99,7 +101,29 @@ opencv 다운받아 build
 	sudo sh -c echo '/usr/local/lib/' > sudo /etc/ld.so.conf.d/opencv.conf   
 	sudo ldconfig   
 
+# 1. autoware_camera_lidar_calibration
 
+required topic   
+/image_raw   
+/camera_info    
+/points_raw (lidar_raw data)   
+
+plz check param in calibration_tool/src/autoware_camera_lidar_calibrator/launch/pubtf.launch   
+
+
+	catkin_make
+	bash calibration_check_start.sh
+
+# 2. extract_RT
+
+	catkin_make
+	bash extract_RT_start.sh
+
+# 3. calibration_check
+
+required topic   
+/image_raw   
+/points_raw (lidar_raw data)   
 
 
 
