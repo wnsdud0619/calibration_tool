@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<launch>
+   <node pkg="tf" type="static_transform_publisher" name="base_link2sensor"
+        args="0 0 0 0 0 0 sensor_kit_base_link velodyne_top_base_link 10">
+    </node>
+    <node pkg="tf" type="static_transform_publisher" name="vel2base_link"
+        args="0 0 0 0 0 0 velodyne_top_base_link velodyne_top 10">
+    </node>
+    <node pkg="tf" type="static_transform_publisher" name="raw2vel"
+        args="0 0 0 0 0 0 velodyne_top base_link 10">
+    </node>
+
+    <node pkg="tf" type="static_transform_publisher" name="TL_camera_link"
+        args="1.2565356521305626e-01 -9.4853344809475715e-03 -1.1977902297020822e-01 -1.2441139668226242e-02 -7.6791413128376007e-02 -1.6957703977823257e-02 sensor_kit_base_link TL_camera 10">
+    </node>
+    <node pkg="tf" type="static_transform_publisher" name="TL_optical_link"
+        args="0 0 0 -1.5707963705062866e+00 0 -1.5707963705062866e+00 TL_camera TL_optical 10">
+    </node>
+</launch>

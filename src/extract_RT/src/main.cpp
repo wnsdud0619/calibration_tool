@@ -1,6 +1,7 @@
 #include <iostream>
 #include <fstream>
 #include <pwd.h>
+#include <string>
 
 #include <sensor_msgs/CompressedImage.h>
 #include <sensor_msgs/PointCloud2.h>
@@ -10,8 +11,15 @@
 #include <eigen3/Eigen/Eigen>
 #include <opencv2/highgui.hpp>
 
-cv::Mat cameraMat;
-cv::Mat distCoeff;
+#include <tf2_ros/transform_listener.h>
+#include <geometry_msgs/TransformStamped.h>
+#include <tf2/LinearMath/Matrix3x3.h>
+
+static cv::Mat cameraMat;
+static cv::Mat distCoeff;
+static cv::Mat img_pts;
+static cv::Mat lidar_pts;
+cv::Size ImageSize;
 std::vector<cv::Point3f> clicked_lidar_points;
 std::vector<cv::Point2f> clicked_image_points;
 std::vector<double> re_error, R_error_degree, T_error;
@@ -64,7 +72,7 @@ void SaveCalibrationFile(cv::Mat in_intrinsic, cv::Mat in_dist_coeff, cv::Mat tr
     if ((homedir = getenv("HOME")) == NULL) {
         homedir = getpwuid(getuid())->pw_dir;
     }
-    path_filename_str = std::string(homedir) + "/lidar2cam-cali_ws/" + "RT_lidar_camera_calibration.yaml";
+    path_filename_str = std::string(homedir) + "/calibration_tool/src/calibration_check/param/" + "RT_lidar_camera_calibration.yaml";
 
     cv::FileStorage fs(path_filename_str.c_str(), cv::FileStorage::WRITE);
     if(!fs.isOpened()){
@@ -82,53 +90,48 @@ void SaveCalibrationFile(cv::Mat in_intrinsic, cv::Mat in_dist_coeff, cv::Mat tr
     fs << "ReprojectionError" << re_error;
     fs << "RotationError" << R_error;
     fs << "TranslationError" << T_error;
+    fs << "ImageSize" << ImageSize;
 
     ROS_INFO("Wrote Autoware Calibration file in: %s", path_filename_str.c_str());
 }
 
 bool parse_params(ros::NodeHandle _nh)
 {
-    std::vector<float> vector_camMat, vector_distCoeff, vector_lidar_pts, vector_img_pts;
-    int lidar_points_size, img_points_size;
+    char __APP_NAME__[] = "extract_RT";
 
-    if(!_nh.getParam("/CameraMat/data", vector_camMat))
-    {
-        ROS_INFO("No parameter : cameraMat");
-        return true;
-    }
-    cameraMat = (cv::Mat_<float>(3, 3) << vector_camMat[0], vector_camMat[1], vector_camMat[2],
-            vector_camMat[3], vector_camMat[4], vector_camMat[5],
-            vector_camMat[6], vector_camMat[7], vector_camMat[8]);
+    std::string calibration_file;
+    _nh.param<std::string>("calibration_file", calibration_file, "");
+    ROS_INFO("calibration_file: '%s'", calibration_file.c_str());
 
-    if(!_nh.getParam("/DistCoeff/data", vector_distCoeff))
+    if (calibration_file.empty())
     {
-        ROS_INFO("No parameter : distCoeff");
-        return true;
-    }
-    distCoeff = (cv::Mat_<float>(5, 1) << vector_distCoeff[0], vector_distCoeff[1], vector_distCoeff[2], vector_distCoeff[3], vector_distCoeff[4]);
-
-    if(!_nh.getParam("/lidar_pts/data", vector_lidar_pts))
-    {
-        ROS_INFO("No parameter : lidar_pts");
-        return true;
+      ROS_ERROR("[%s] Missing calibration file path '%s'.", __APP_NAME__, calibration_file.c_str());
+      ros::shutdown();
+      return -1;
     }
 
-    for(int i=0; i<vector_lidar_pts.size(); i+=3)
+    cv::FileStorage fs(calibration_file, cv::FileStorage::READ);
+    if (!fs.isOpened())
     {
-        clicked_lidar_points.push_back(cv::Point3f(vector_lidar_pts[i],vector_lidar_pts[i+1],vector_lidar_pts[i+2]));
+      ROS_ERROR("[%s] Cannot open file calibration file '%s'", __APP_NAME__, calibration_file.c_str());
+      ros::shutdown();
+      return -1;
     }
 
-    if(!_nh.getParam("/img_pts/data", vector_img_pts))
-    {
-        ROS_INFO("No parameter : img_pts");
-        return true;
-    }
+    fs["CameraMat"] >> cameraMat;
+    fs["DistCoeff"] >> distCoeff;
+    fs["img_pts"] >> img_pts;
+    fs["lidar_pts"] >> lidar_pts;
+    fs["ImageSize"] >> ImageSize;
 
-    for(int i=0; i<vector_img_pts.size(); i+=2)
+    for(int i=0; i<img_pts.rows; i++)
     {
-        clicked_image_points.push_back(cv::Point2f(vector_img_pts[i],vector_img_pts[i+1]));
+        clicked_image_points.push_back(img_pts.at<cv::Point2f>(i,0));
     }
-
+    for(int i=0; i<lidar_pts.rows; i++)
+    {
+        clicked_lidar_points.push_back(lidar_pts.at<cv::Point3f>(i,0));
+    }
     return false;
 }
 
@@ -136,33 +139,14 @@ int main(int argc, char ** argv)
 {
     ros::init(argc, argv, "extract_RT");
     ros::NodeHandle nh;
-    ros::NodeHandle p_nh("~");
-
+ 
     // parsing parameters
     if(parse_params(nh)) return -1;
     double input_point_size = clicked_image_points.size();
-    cv::Mat rotation_vector, translation_vector;
-    //NO Ransac PnP
-    cv::solvePnP(clicked_lidar_points,
-                 clicked_image_points,
-                 cameraMat,
-                 distCoeff,
-                 rotation_vector,
-                 translation_vector,
-                 false,
-                 cv::SOLVEPNP_ITERATIVE
-                 );
-
-   /* cv::solvePnPRefineVVS(clicked_lidar_points,
-                          clicked_image_points,
-                          cameraMat,
-                          distCoeff,
-                          rotation_vector,
-                          translation_vector,
-                          cv::TermCriteria(cv::TermCriteria::EPS+cv::TermCriteria::COUNT, 20, FLT_EPSILON),1);*/
-
+    
     //Ransac PNP
-   /* cv::Mat inliers;
+    cv::Mat rotation_vector, translation_vector;
+    cv::Mat inliers;
     std::vector<cv::Point2f> inlier2d;
     std::vector<cv::Point3f> inlier3d;
 
@@ -192,7 +176,7 @@ int main(int argc, char ** argv)
                          distCoeff,
                          rotation_vector,
                          translation_vector,
-                         cv::TermCriteria(cv::TermCriteria::EPS+cv::TermCriteria::COUNT, 20, FLT_EPSILON),1);*/
+                         cv::TermCriteria(cv::TermCriteria::EPS+cv::TermCriteria::COUNT, 20, FLT_EPSILON),1);
 
     //re_error
     std::vector<cv::Point2f> reproject_img_pts;
@@ -216,7 +200,7 @@ int main(int argc, char ** argv)
     cv::Mat R_optical2cam = (cv::Mat_<double>(3, 3) << 0.0, -1.0, 0.0, 0.0, 0.0, -1.0, 1.0, 0.0, 0.0);  // zyx rotation : [-pi/2 0 -pi/2]'
     cv::Mat sensor_rotation = sensor_rotation_matrix.t();
     cv::Point3f ypr = get_ypr_from_matrix(sensor_rotation * R_optical2cam);
-    std::cout << "Sensor to Optical Rotation(z, y, x) : " << "[" << ypr.z<< "; " << ypr.y << "; " << ypr.x  << "]" << std::endl;
+    std::cout << "Sensor to Optical Rotation(x, y, z) : " << "[" << ypr.x<< "; " << ypr.y << "; " << ypr.z  << "]" << std::endl;
 
     cv::Mat sensor_translation_vector = -sensor_rotation * translation_vector;
     std::cout << "Sensor to Optical translation(x, y, z) : " << sensor_translation_vector << std::endl;
@@ -288,7 +272,6 @@ int main(int argc, char ** argv)
     std::cout<<"T_error_devi: " <<T_error_devi <<std::endl;
 
     SaveCalibrationFile(cameraMat, distCoeff, sensor_translation_vector, sensor_rotation, re_error_avg, R_error_avg, T_error_avg);
-
     return 0;
 }
 

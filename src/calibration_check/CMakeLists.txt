@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.0.2)
 project(calibration_check)
 set(CMAKE_CXX_STANDARD 11)
 
-find_package(catkin REQUIRED COMPONENTS cv_bridge pcl_ros image_transport message_generation sensor_msgs)
+find_package(catkin REQUIRED COMPONENTS cv_bridge pcl_ros image_transport message_generation sensor_msgs tf tf2 tf2_ros)
 
 generate_messages(DEPENDENCIES sensor_msgs)
 catkin_package(CATKIN_DEPENDS cv_bridge image_transport message_runtime sensor_msgs)

@@ -1,5 +1,7 @@
 #include <iostream>
 #include <fstream>
+#include <pwd.h>
+#include <string>
 
 #include <sensor_msgs/CompressedImage.h>
 #include <sensor_msgs/PointCloud2.h>
@@ -19,12 +21,19 @@
 #include <opencv2/imgproc.hpp>
 #include <cv_bridge/cv_bridge.h>
 
+#include <tf2_ros/transform_listener.h>
+#include <geometry_msgs/TransformStamped.h>
+#include <tf2/LinearMath/Matrix3x3.h>
+
 int img_wdith, img_height;
 double tunning_scale, display_scale, display_resize;
 bool display_mode;
 
-cv::Mat cameraMat;
-cv::Mat distCoeff;
+static cv::Mat cameraMat;
+static cv::Mat distCoeff;
+cv::Size ImageSize;
+static cv::Mat T_Sensor2Cam;
+cv::Point3f R_Sensor2Cam;
 
 double sensor2vel_top_x;
 double sensor2vel_top_y;
@@ -53,9 +62,80 @@ cv::Mat t_sensor2optical = cv::Mat::eye(3, 3, CV_64FC1);
 cv::Mat r_cam2optical = (cv::Mat_<double>(3, 3) << 0., 0., 1.,
                 -1., 0., 0.,
                 0., -1., 0.);
+              
+void SaveCalibrationFile(double x, double y, double z, double roll, double pitch, double yaw)
+{
+    std::string path_filename_str;
+    const char *homedir;
+
+    cv::Point3f sensor2cam_T;
+    cv::Point3f sensor2cam_R;
+
+    sensor2cam_T = cv::Point3f(x, y, z);
+    sensor2cam_R = cv::Point3f(roll, pitch, yaw);
+
+    if ((homedir = getenv("HOME")) == NULL) {
+        homedir = getpwuid(getuid())->pw_dir;
+    }
+    path_filename_str = std::string(homedir) + "/calibration_tool/" + "RT_revise.yaml";
+
+    cv::FileStorage fs(path_filename_str.c_str(), cv::FileStorage::WRITE);
+    if(!fs.isOpened()){
+        fprintf(stderr, "%s : cannot open file\n", path_filename_str.c_str());
+        exit(EXIT_FAILURE);
+    }
+
+    fs << "sensor2cam_T" << sensor2cam_T;
+    fs << "sensor2cam_R" << sensor2cam_R;
+
+    ROS_INFO("Wrote Autoware Calibration file in: %s", path_filename_str.c_str());
+}
 
 bool parse_params(ros::NodeHandle _nh)
 {
+
+    char __APP_NAME__[] = "calibration_check";
+
+    std::string calibration_file;
+    _nh.param<std::string>("calibration_file", calibration_file, "");
+    ROS_INFO("calibration_file: '%s'", calibration_file.c_str());
+
+    if (calibration_file.empty())
+    {
+      ROS_ERROR("[%s] Missing calibration file path '%s'.", __APP_NAME__, calibration_file.c_str());
+      ros::shutdown();
+      return -1;
+    }
+
+    cv::FileStorage fs(calibration_file, cv::FileStorage::READ);
+    if (!fs.isOpened())
+    {
+      ROS_ERROR("[%s] Cannot open file calibration file '%s'", __APP_NAME__, calibration_file.c_str());
+      ros::shutdown();
+      return -1;
+    }
+
+    fs["CameraMat"] >> cameraMat;
+    fs["DistCoeff"] >> distCoeff;
+    fs["ImageSize"] >> ImageSize;
+    fs["T_Sensor2Cam"] >> T_Sensor2Cam;
+    fs["R_Sensor2Cam"] >> R_Sensor2Cam;
+
+    img_height = ImageSize.height;
+    img_wdith = ImageSize.width;
+    image = cv::Mat(img_height, img_wdith, CV_8UC3);
+    pts_img = cv::Mat(img_height, img_wdith, CV_8UC3);
+
+    sensor2cam_x = T_Sensor2Cam.at<double>(0,0);
+    sensor2cam_y = T_Sensor2Cam.at<double>(1,0);
+    sensor2cam_z = T_Sensor2Cam.at<double>(2,0);
+    sensor2cam_roll = R_Sensor2Cam.x;
+    sensor2cam_pitch = R_Sensor2Cam.y;
+    sensor2cam_yaw = R_Sensor2Cam.z;
+
+    std::cout<<"sensor2cam_T: "<<sensor2cam_x<<", "<<sensor2cam_y<<", "<<sensor2cam_z<<std::endl;
+    std::cout<<"sensor2cam_R: "<<sensor2cam_roll<<", "<<sensor2cam_pitch<<", "<<sensor2cam_yaw<<std::endl;
+
     std::vector<double> vector_camMat, vector_distCoeff;
     if(!_nh.getParam("/tunning_scale", tunning_scale)) 
     {
@@ -78,97 +158,6 @@ bool parse_params(ros::NodeHandle _nh)
         return true;
     }
 
-    if(!_nh.getParam("/image_width", img_wdith)) 
-    {
-        ROS_INFO("No parameter : img_wdith");
-        return true;
-    }
-
-    if(!_nh.getParam("/image_height", img_height)) 
-    {
-        ROS_INFO("No parameter : img_height");
-        return true;
-    }
-    image = cv::Mat(img_height, img_wdith, CV_8UC3);
-    pts_img = cv::Mat(img_height, img_wdith, CV_8UC3);
-
-    if(!_nh.getParam("/camera_matrix/data", vector_camMat)) 
-    {
-        ROS_INFO("No parameter : cameraMat");
-        return true;
-    }
-    cameraMat = (cv::Mat_<double>(3, 3) << vector_camMat[0], vector_camMat[1], vector_camMat[2], 
-        vector_camMat[3], vector_camMat[4], vector_camMat[5], 
-        vector_camMat[6], vector_camMat[7], vector_camMat[8]);
-
-    if(!_nh.getParam("/distortion_coefficients/data", vector_distCoeff)) 
-    {
-        ROS_INFO("No parameter : distCoeff");
-        return true;
-    }
-    distCoeff = (cv::Mat_<double>(5, 1) << vector_distCoeff[0], vector_distCoeff[1], vector_distCoeff[2], vector_distCoeff[3], vector_distCoeff[4]);
-
-    if(!_nh.getParam("/sensor_kit_base_link2velodyne_top_base_link/x", sensor2vel_top_x))
-    {
-        ROS_INFO("No parameter : sensor_kit_base_link2velodyne_top_base_link");
-        return true;
-    }
-    if(!_nh.getParam("/sensor_kit_base_link2velodyne_top_base_link/y", sensor2vel_top_y))
-    {
-        ROS_INFO("No parameter : sensor_kit_base_link2velodyne_top_base_link");
-        return true;
-    }
-    if(!_nh.getParam("/sensor_kit_base_link2velodyne_top_base_link/z", sensor2vel_top_z))
-    {
-        ROS_INFO("No parameter : sensor_kit_base_link2velodyne_top_base_link");
-        return true;
-    }
-    if(!_nh.getParam("/sensor_kit_base_link2velodyne_top_base_link/roll", sensor2vel_top_roll))
-    {
-        ROS_INFO("No parameter : sensor_kit_base_link2velodyne_top_base_link");
-        return true;
-    }
-    if(!_nh.getParam("/sensor_kit_base_link2velodyne_top_base_link/pitch", sensor2vel_top_pitch))
-    {
-        ROS_INFO("No parameter : sensor_kit_base_link2velodyne_top_base_link");
-        return true;
-    }
-    if(!_nh.getParam("/sensor_kit_base_link2velodyne_top_base_link/yaw", sensor2vel_top_yaw))
-    {
-        ROS_INFO("No parameter : sensor_kit_base_link2velodyne_top_base_link");
-        return true;
-    }
-
-    if(!_nh.getParam("/sensor_kit_base_link2traffic_light_camera/x", sensor2cam_x))
-    {
-        ROS_INFO("No parameter : sensor_kit_base_link2traffic_light_camera");
-        return true;
-    }
-    if(!_nh.getParam("/sensor_kit_base_link2traffic_light_camera/y", sensor2cam_y))
-    {
-        ROS_INFO("No parameter : sensor_kit_base_link2traffic_light_camera");
-        return true;
-    }
-    if(!_nh.getParam("/sensor_kit_base_link2traffic_light_camera/z", sensor2cam_z))
-    {
-        ROS_INFO("No parameter : sensor_kit_base_link2traffic_light_camera");
-        return true;
-    }
-    if(!_nh.getParam("/sensor_kit_base_link2traffic_light_camera/roll", sensor2cam_roll))
-    {
-        ROS_INFO("No parameter : sensor_kit_base_link2traffic_light_camera");
-        return true;
-    }
-    if(!_nh.getParam("/sensor_kit_base_link2traffic_light_camera/pitch", sensor2cam_pitch))
-    {
-        ROS_INFO("No parameter : sensor_kit_base_link2traffic_light_camera");
-        return true;
-    }
-    if(!_nh.getParam("/sensor_kit_base_link2traffic_light_camera/yaw", sensor2cam_yaw))
-    {
-        ROS_INFO("No parameter : sensor_kit_base_link2traffic_light_camera");
-        return true;
-    }
     return false;
 }
 
@@ -233,9 +222,25 @@ int main(int argc, char ** argv)
     cv::namedWindow("view", CV_WINDOW_NORMAL);
     cv::resizeWindow("view", img_height * display_resize, img_wdith * display_resize);
 
-//    ros::Subscriber sub_img = nh.subscribe("/sensing/camera/traffic_light/image_raw", 1, imageCallback);
     ros::Subscriber sub_img = nh.subscribe("/sensing/camera/traffic_light/image_raw", 1, imageCallback);
     ros::Subscriber sub_points = nh.subscribe("/points_raw", 1, Callback_point_cloud);
+
+    tf2_ros::Buffer tf_buffer_;
+    tf2_ros::TransformListener tfListener(tf_buffer_);
+    geometry_msgs::TransformStamped tfs;
+    try 
+    {  
+      tfs = tf_buffer_.lookupTransform("sensor_kit_base_link", "base_link", ros::Time(0), ros::Duration(1.0));
+    }
+    catch (tf2::TransformException & ex) 
+    {
+      ROS_WARN_THROTTLE(5, "cannot get transform");
+    }
+
+    tf2::Vector3 lidar2sensor_vec(tfs.transform.translation.x, tfs.transform.translation.y, tfs.transform.translation.z);
+    tf2::Matrix3x3 lidar2sensor_rot(tf2::Quaternion(tfs.transform.rotation.x, tfs.transform.rotation.y, tfs.transform.rotation.z,tfs.transform.rotation.w));
+    lidar2sensor_rot.getRPY(sensor2vel_top_yaw, sensor2vel_top_pitch, sensor2vel_top_roll);
+    std::cout<<"sensor2vel_top_R: "<<sensor2vel_top_roll<<", "<<sensor2vel_top_pitch<<", "<<sensor2vel_top_yaw<<std::endl;
 
     Eigen::AngleAxisf yawAngle(sensor2vel_top_yaw, Eigen::Vector3f::UnitZ());
     Eigen::AngleAxisf pitchAngle(sensor2vel_top_pitch, Eigen::Vector3f::UnitY());
@@ -294,10 +299,11 @@ int main(int argc, char ** argv)
             case 'o' : display_scale += 0.25;                   break;
             case 'l' : display_scale -= 0.25;                   break;
             case 'p' : display_mode = !display_mode;            break;
-            case 32 :
+            case 32 : //space
             std::cout << "roll: " << sensor2cam_roll << std::endl;
             std::cout << "pitch: " << sensor2cam_pitch << std::endl;
             std::cout << "yaw: " << sensor2cam_yaw << std::endl;
+            SaveCalibrationFile(sensor2cam_x, sensor2cam_y, sensor2cam_z, sensor2cam_roll, sensor2cam_pitch, sensor2cam_yaw);
             break;
         }
     }

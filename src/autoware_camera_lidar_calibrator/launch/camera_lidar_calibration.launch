@@ -1,43 +1,12 @@
-<!--
-roslaunch autoware_camera_lidar_calibrator camera_lidar_calibration.launch intrinsics_file:=/home/ne0/Desktop/calib_heat_camera1_rear_center_fisheye.yaml compressed_stream:=True camera_id:=camera1
--->
+<?xml version="1.0" encoding="UTF-8"?>
 <launch>
     <arg name="image_src" default="/sensing/camera/traffic_light/image_raw" />
     <arg name="camera_info_src" default="/sensing/camera/traffic_light/camera_info" />
     <arg name="camera_id" default="/" />
     <arg name="intrinsics_file" default="/" />
-    <arg name="compressed_stream" default="false" />
     <arg name="target_frame" default="velodyne"/>
     <arg name="camera_frame" default="camera"/>
 
-    <node if="$(arg compressed_stream)" name="decompress" type="republish" pkg="image_transport" output="screen" args="compressed in:=/$(arg camera_id)/$(arg image_src) raw out:=/$(arg camera_id)/$(arg image_src)" />
-    <node pkg="tf" type="static_transform_publisher" name="base_link2sensor"
-        args="0 0 0 0.00872664626 0 0 sensor_kit_base_link velodyne_top_base_link 10">
-    </node>
-    <node pkg="tf" type="static_transform_publisher" name="vel2base_link"
-        args="0 0 0 0 0 0 velodyne_top_base_link velodyne_top 10">
-    </node>
-    <node pkg="tf" type="static_transform_publisher" name="raw2vel"
-        args="0 0 0 0 0 0 velodyne_top base_link 10">
-    </node>
-
-    <node pkg="tf" type="static_transform_publisher" name="TL_camera_link"
-        args="1.2565356521305626e-01 -9.4853344809475715e-03 -1.1977902297020822e-01 -1.2441139668226242e-02 -7.6791413128376007e-02 -1.6957703977823257e-02 sensor_kit_base_link TL_camera 10">
-    </node>
-    <node pkg="tf" type="static_transform_publisher" name="TL_optical_link"
-        args="0 0 0 -1.5707963705062866e+00 0 -1.5707963705062866e+00 TL_camera TL_optical 10">
-    </node>
-
-    <node pkg="calibration_publisher" type="calibration_publisher" name="calibration_publisher" ns="$(arg camera_id)">
-        <param name="register_lidar2camera_tf" type="bool" value="false"/>
-        <param name="publish_extrinsic_mat" type="bool" value="false"/>
-        <param name="publish_camera_info" type="bool" value="true"/>
-        <param name="image_topic_src" value="$(arg image_src)"/>
-        <param name="calibration_file" value="$(arg intrinsics_file)"/>
-        <param name="target_frame" type="str" value="$(arg target_frame)"/>
-        <param name="camera_frame" type="str" value="$(arg camera_frame)"/>
-    </node>
-    
     <node pkg="image_view2" type="image_view2" name="image_view2" ns="$(arg camera_id)" output="screen">
         <remap from="image" to="$(arg image_src)" />
     </node>
@@ -47,4 +16,7 @@ roslaunch autoware_camera_lidar_calibrator camera_lidar_calibration.launch intri
         <param name="camera_info_src" value="$(arg camera_info_src)" />
     </node>
 
+    <!--pubtf-->		
+    <include file="$(find autoware_camera_lidar_calibrator)/launch/pubtf.launch">
+    </include>
 </launch>

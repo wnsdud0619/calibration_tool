@@ -1,12 +1,16 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <launch>
-  <arg name="calib_file" value="$(find calibration_check)/param/sensor_kit_calibration.yaml" />
-  <arg name="cam_param_file" value="$(find calibration_check)/param/calibration_param.yaml" />
-  <param name="tunning_scale" value="0.000175" />
-  <param name="display_mode" value="True" />
-  <param name="display_scale" value="5.0" />
-  <param name="display_resize" value="0.5" />
-  <rosparam command="load" file="$(arg calib_file)" />
-  <rosparam command="load" file="$(arg cam_param_file)" />
-  <node pkg="calibration_check" type="calibration_check_node" name="calibration_check" output="screen" />
+    <param name="tunning_scale" value="0.000175" />
+    <param name="display_mode" value="True" />
+    <param name="display_scale" value="5.0" />
+    <param name="display_resize" value="0.5" />
+
+    <arg name="calib_file" value="$(find calibration_check)/param/RT_lidar_camera_calibration.yaml" />
+    <param name="calibration_file" value="$(arg calib_file)"/>
+
+    <node pkg="calibration_check" type="calibration_check_node" name="calibration_check" output="screen" />
+
+    <!--pubtf-->		
+    <include file="$(find autoware_camera_lidar_calibrator)/launch/pubtf.launch">
+    </include>
 </launch>
